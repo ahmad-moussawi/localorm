@@ -13,16 +13,16 @@ A lightweight, TypeScript-based ORM (Object-Relational Mapping) library for Inde
 
 ## Installation
 
+This is a TypeScript library for working with IndexedDB. To use it in your project, you can copy the source files from the `src/orm` directory or install dependencies:
+
 ```bash
-npm install localorm
+npm install
 ```
 
-Or with other package managers:
+The library requires the `idb` package as a dependency:
 
 ```bash
-yarn add localorm
-# or
-pnpm add localorm
+npm install idb
 ```
 
 ## Quick Start
@@ -30,7 +30,7 @@ pnpm add localorm
 ### 1. Define Your Models
 
 ```typescript
-import { Model } from 'localorm';
+import { Model } from './orm/model';
 
 class User extends Model {
   public name!: string;
@@ -48,7 +48,8 @@ class Post extends Model {
 ### 2. Create Your Database
 
 ```typescript
-import { Idb, Entity } from 'localorm';
+import { Idb } from './orm/idb';
+import { Entity } from './orm/entity';
 
 class MyDatabase extends Idb {
   public users = new Entity<User>('users', User);
@@ -63,10 +64,14 @@ await db.connect();
 ### 3. Perform CRUD Operations
 
 ```typescript
-// Create (Add records)
+// Create (Add records) - using IndexedDB directly
 const transaction = db.getDb().transaction('users', 'readwrite');
 const userStore = transaction.objectStore('users');
-await userStore.add({ name: 'Alice', age: 30, email: 'alice@example.com' });
+await new Promise((resolve, reject) => {
+  const request = userStore.add({ name: 'Alice', age: 30, email: 'alice@example.com' });
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error);
+});
 
 // Read all users
 const users = await db.users.get();
@@ -159,7 +164,8 @@ LocalORM supports defining and loading relationships between models.
 ### Defining Relationships
 
 ```typescript
-import { Model, OneToMany, Relation } from 'localorm';
+import { Model } from './orm/model';
+import { OneToMany, Relation } from './orm/relation';
 
 class User extends Model {
   public name!: string;
@@ -209,7 +215,8 @@ const userWithRecentPosts = await db.users
 ### Relationship Types
 
 ```typescript
-import { OneToOne, OneToMany, ManyToMany } from 'localorm';
+import { OneToOne, OneToMany, ManyToMany, Relation } from './orm/relation';
+import { Model } from './orm/model';
 
 // One-to-One: A user has one profile
 class User extends Model {
@@ -242,7 +249,10 @@ class User extends Model {
 ## Complete Example
 
 ```typescript
-import { Idb, Entity, Model, OneToMany, Relation } from 'localorm';
+import { Idb } from './orm/idb';
+import { Entity } from './orm/entity';
+import { Model } from './orm/model';
+import { OneToMany, Relation } from './orm/relation';
 
 // Define models
 class User extends Model {
@@ -269,6 +279,14 @@ class BlogDatabase extends Idb {
   public posts = new Entity<Post>('posts', Post);
 }
 
+// Helper function to promisify IndexedDB requests
+function promisify<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 // Initialize and use
 async function main() {
   const db = new BlogDatabase('blog-db', 1);
@@ -278,13 +296,13 @@ async function main() {
   const idb = db.getDb();
   const userTx = idb.transaction('users', 'readwrite');
   const userStore = userTx.objectStore('users');
-  await userStore.add({ name: 'Alice', age: 30 });
-  await userStore.add({ name: 'Bob', age: 25 });
+  await promisify(userStore.add({ name: 'Alice', age: 30 }));
+  await promisify(userStore.add({ name: 'Bob', age: 25 }));
 
   const postTx = idb.transaction('posts', 'readwrite');
   const postStore = postTx.objectStore('posts');
-  await postStore.add({ title: 'First Post', content: 'Hello World', userId: 1 });
-  await postStore.add({ title: 'Second Post', content: 'TypeScript is great', userId: 1 });
+  await promisify(postStore.add({ title: 'First Post', content: 'Hello World', userId: 1 }));
+  await promisify(postStore.add({ title: 'Second Post', content: 'TypeScript is great', userId: 1 }));
 
   // Query with filters
   const adults = await db.users
